@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="login-container">
+  <div class="login-box">
+    <div class="logo-section">
+      <div class="logo-icon">
+        <img src="https://cic.ndu.edu/Portals/74/CICSealWeb.png" alt="CIC logo" />
+      </div>
+      <div class="logo-text">
+        <h1>CIC Course Scheduler</h1>
+        <p>College of Information and Cyberspace</p>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="error-message">{{ error }}</div>
+    {% endif %}
+
+    <form method="post">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" placeholder="e.g. faculty12@ndu.edu" required />
+      </div>
+      <div class="form-group">
+        <label>Password (demo default: 123456)</label>
+        <input type="password" name="password" required />
+      </div>
+      <button class="submit-btn" type="submit">Sign In</button>
+    </form>
+
+    <div class="demo-section">
+      <p class="demo-label">Demo accounts</p>
+      <p><strong>Admin:</strong> admin1@ndu.edu</p>
+      <p><strong>Instructors:</strong> faculty1@ndu.edu ... faculty25@ndu.edu</p>
+      <p><strong>Password:</strong> 123456</p>
+    </div>
+  </div>
+</div>
+<script>
+  document.body.classList.add('login-page');
+</script>
+{% endblock %}
