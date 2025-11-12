@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="login-container"
+     style="display:flex; justify-content:center; align-items:center; height:100vh; width:100%; background:#f9fafb; margin:0;">
+  
+  <div class="login-box"
+       style="background:white; padding:40px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.08); width:400px; text-align:center;">
+    
+    <div class="logo-section" style="margin-bottom:20px;">
+      <div class="logo-icon">
+        <img src="https://cic.ndu.edu/Portals/74/CICSealWeb.png" alt="CIC logo" style="width:100px; height:auto;" />
+      </div>
+      <div class="logo-text">
+        <h1 style="margin:12px 0 4px 0;">CIC Course Scheduler</h1>
+        <p style="margin:0; color:#6b7280;">College of Information and Cyberspace</p>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="error-message" style="color:#dc2626; margin-bottom:12px;">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" style="text-align:left;">
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Email</label>
+        <input type="email" name="email" placeholder="e.g. faculty12@ndu.edu" required
+               style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:6px; margin-top:4px;" />
+      </div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label>Password (demo default: 123456)</label>
+        <input type="password" name="password" required
+               style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:6px; margin-top:4px;" />
+      </div>
+      <button class="submit-btn" type="submit"
+              style="width:100%; background:#2563eb; color:white; padding:10px 0; border:none; border-radius:8px; font-weight:600; cursor:pointer;">
+        Sign In
+      </button>
+    </form>
+
+    <div class="demo-section" style="margin-top:20px; text-align:left; font-size:0.9rem;">
+      <p class="demo-label" style="font-weight:600;">Demo accounts</p>
+      <p><strong>Admin:</strong> admin1@umd.edu</p>
+      <p><strong>Instructors:</strong> faculty1@umd.edu ... faculty25@ndu.edu</p>
+      <p><strong>Password:</strong> 123456</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

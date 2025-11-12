@@ -1,0 +1,682 @@
+{% extends "base.html" %}
+{% block body %}
+
+<style>
+  #scheduleStatus { display:none; margin-bottom: 12px; }
+  table#scheduleTable .cell-input { display: none; }
+  table#scheduleTable tr.is-editing .cell-input { display: block; }
+  table#scheduleTable tr.is-editing .cell-display { display: none; }
+  table#scheduleTable tr.is-editing select,
+  table#scheduleTable tr.is-editing input { width: 100%; box-sizing: border-box; }
+  table#scheduleTable tr .row-actions { white-space: nowrap; }
+  table#scheduleTable tr .row-actions button { margin-right: 4px; }
+  table#scheduleTable tr .row-actions .save-row,
+  table#scheduleTable tr .row-actions .cancel-row { display: none; }
+  table#scheduleTable tr.is-editing .row-actions .save-row,
+  table#scheduleTable tr.is-editing .row-actions .cancel-row { display: inline-flex; }
+  .group-row td { background: #f1f5f9; font-weight: 600; color: #334155; letter-spacing: .04em; text-transform: uppercase; }
+  .group-row-content { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .group-edit-btn { font-size: 12px; padding:4px 10px; }
+  .group-row.is-editing td { background:#e2e8f0; }
+  .issues-cell { text-align:center; }
+  .issue-icon {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    font-size:13px;
+    font-weight:700;
+    margin:0 2px;
+    color:#fff;
+    background:#f97316;
+    cursor:default;
+  }
+  .issue-icon.issue-unassigned { background:#dc2626; }
+  .issue-icon.issue-imbalance { background:#f59e0b; }
+  .issue-icon.issue-overload { background:#b91c1c; }
+  .issue-icon.issue-overlap { background:#9333ea; }
+  .issue-icon + .issue-icon { margin-left:4px; }
+  .issue-icon[data-tooltip] { position: relative; }
+  .issue-icon[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.92);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: normal;
+    min-width: 160px;
+    max-width: 220px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+    z-index: 10;
+  }
+  .issue-icon[data-tooltip]:hover::after {
+    opacity: 1;
+  }
+  .issue-icon[data-tooltip]::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(15, 23, 42, 0.92);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .issue-icon[data-tooltip]:hover::before {
+    opacity: 1;
+  }
+  .issue-legend { display:flex; flex-wrap:wrap; gap:12px; align-items:center; font-size:13px; color:#475569; }
+  .issue-legend-label { font-weight:600; margin-right:4px; }
+  .issue-legend-item { display:flex; align-items:center; gap:6px; }
+</style>
+
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">
+      <img src="https://cic.ndu.edu/Portals/74/CICSealWeb.png" alt="logo" />
+    </div>
+    <div>
+      <h1>CIC Course</h1>
+      <p>Schedule View</p>
+    </div>
+  </div>
+
+  <h2 class="nav-section-title">Admin Tools</h2>
+  <a class="nav-button" href="{{ url_for('admin_dashboard') }}">👥 Submitted Preferences</a>
+  <a class="nav-button" href="{{ url_for('admin_upload') }}">📤 Upload Files</a>
+  <a class="nav-button active">📋 View Schedule</a>
+  <a class="nav-button" href="{{ url_for('admin_analysis', run_id=run_id) }}">🧠 AI Analysis</a>
+  <a class="nav-button" href="{{ url_for('logout') }}">Logout</a>
+
+  <div class="sidebar-footer">
+    <div class="user-info">Current Semester</div>
+    <div class="username">{{ semester.semesterId }}</div>
+  </div>
+</div>
+
+<div class="main-content">
+  {% if message %}
+  <div class="badge red" style="margin-bottom: 16px;">{{ message }}</div>
+  {% endif %}
+
+  <div class="header">
+    <div class="header-left">
+      <h2>{{ current_method_label }}</h2>
+      {% if current_method == summary_method_key %}
+      <p>Comparison overview of all generated methods and AI insights.</p>
+      {% else %}
+      <p>Review assignments, loads, and issues for this method.</p>
+      {% endif %}
+    </div>
+
+    <div class="row" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <form method="post" action="{{ url_for('admin_reset_schedule') }}"
+        onsubmit="return confirm('Clear the AI-generated schedule for the active semester? This cannot be undone.')">
+        <button class="btn-secondary" type="submit">🔄 Reset Schedule</button>
+      </form>
+      <button id="printBtn" class="btn-secondary">🖨️ Print</button>
+      <button id="csvBtn" class="btn-secondary">⬇️ Download CSV</button>
+    </div>
+  </div>
+
+  <div class="content-area">
+    <div class="form-section" style="display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap;">
+      <form method="get" action="{{ url_for('admin_schedule') }}">
+        <input type="hidden" name="method" value="{{ prev_method or current_method }}">
+        <button class="btn-secondary" type="submit" {% if not prev_method %}disabled{% endif %}>⬅️ Previous</button>
+      </form>
+      <div style="font-weight:600; color:#1f2937;">
+        Page {{ current_method_index }} of {{ nav_pages|length }} — {{ current_method_label }}
+      </div>
+      <form method="get" action="{{ url_for('admin_schedule') }}">
+        <input type="hidden" name="method" value="{{ next_method or current_method }}">
+        <button class="btn-secondary" type="submit" {% if not next_method %}disabled{% endif %}>Next ➡️</button>
+      </form>
+      <a class="btn-primary" href="{{ url_for('admin_analysis', method=current_method) }}" style="white-space:nowrap;">🧠 Open AI Analysis</a>
+    </div>
+
+    {% if current_method == summary_method_key %}
+    <div class="form-section">
+      <h3 style="margin-top:0; margin-bottom:16px;">All Methods Summary</h3>
+      {% if kpi_summary %}
+      <div class="table-wrap">
+        <table class="simple-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              {% for row in kpi_summary %}
+              <th>{{ row.Method }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for metric in kpi_metrics %}
+            <tr>
+              <td>{{ metric }}</td>
+              {% for row in kpi_summary %}
+              <td>{{ row.get(metric, '—') }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p style="color:var(--muted); margin:0;">Generate the schedule to view KPI comparisons.</p>
+      {% endif %}
+    </div>
+    {% else %}
+    {% if load_summary %}
+    <div class="form-section">
+      <h3 style="margin-top:0; margin-bottom:12px;">Faculty Load Summary</h3>
+      <div class="table-wrap" style="max-height:260px; overflow:auto;">
+        <table class="simple-table">
+          <thead>
+            <tr>
+              <th>Faculty ID</th>
+              <th>Sections Assigned</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for load in load_summary %}
+            <tr>
+              <td>{{ load.facultyUserId }}</td>
+              <td>{{ load.sectionsAssigned }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Controls -->
+    <div class="form-section" style="display:flex; justify-content:space-between; align-items:end; gap:12px;">
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Group by</label>
+        <select id="groupSelect" class="inline-select">
+          <option value="course" selected>Course</option>
+          <option value="instructor">Instructor</option>
+        </select>
+      </div>
+      <div style="flex: 1; max-width: 300px; display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:12px; color:var(--muted); display:block;">Filter</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="filterInput" type="text" placeholder="Type to filter courses or instructors…" style="flex:1;">
+          <div style="display:flex; gap:6px;">
+            <form method="get" action="{{ url_for('admin_schedule') }}">
+              <input type="hidden" name="method" value="{{ prev_method or current_method }}">
+              <button class="btn-secondary" type="submit" {% if not prev_method %}disabled{% endif %}>⬅️</button>
+            </form>
+            <form method="get" action="{{ url_for('admin_schedule') }}">
+              <input type="hidden" name="method" value="{{ next_method or current_method }}">
+              <button class="btn-secondary" type="submit" {% if not next_method %}disabled{% endif %}>➡️</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Table -->
+    <div class="table-wrap">
+      <div id="scheduleStatus" class="badge"></div>
+      <table id="scheduleTable">
+        <thead>
+          <tr>
+            <th data-key="offeringId">Offering ID</th>
+            <th data-key="courseId">Course ID</th>
+            <th data-key="semesterId">Semester ID</th>
+            <th data-key="section">Section ID</th>
+            <th data-key="totalSections">Total Sections</th>
+            <th data-key="category">Course Category</th>
+            <th data-key="faculty">Assigned Faculty ID</th>
+            <th data-key="priority">Priority Rank</th>
+            <th data-key="issues" style="width:110px;">Issues</th>
+            <th style="width:140px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if rows %}
+          {% for r in rows %}
+          {% set course_key = r.courseId ~ ' — ' ~ r.courseTitle %}
+          {% set issue_key = r.courseId ~ '|' ~ r.sectionId %}
+          {% set row_issues = issue_map.get(issue_key, []) %}
+          <tr class="schedule-row"
+              data-row-id="{{ loop.index0 }}"
+              data-group-key="{{ course_key }}"
+              data-offering-id="{{ r.offeringId }}"
+              data-course-id="{{ r.courseId }}"
+              data-course-title="{{ r.courseTitle }}"
+              data-semester-id="{{ r.semesterId }}"
+              data-section="{{ r.sectionId }}"
+              data-original-section="{{ r.sectionId }}"
+              data-total-sections="{{ r.totalSections }}"
+              data-category="{{ r.courseCategory }}"
+              data-priority="{{ r.priorityRank or '' }}"
+              data-faculty="{{ (r.facultyName or r.assignedFacultyUserId or '') | string }}"
+              data-faculty-id="{{ r.assignedFacultyUserId or '' }}"
+              data-faculty-name="{{ r.facultyName or '' }}"
+              data-issues="{{ row_issues|join(',') }}"
+              data-method="{{ current_method }}">
+            <td>
+              <span class="cell-display">{{ r.offeringId }}</span>
+            </td>
+            <td>
+              <span class="cell-display">
+                <strong>{{ r.courseId }}</strong>
+                <small style="display:block; color:var(--muted);">{{ r.courseTitle }}</small>
+              </span>
+              <input class="cell-input" type="text" name="courseId" value="{{ r.courseId }}">
+              <input class="cell-input" type="text" name="courseTitle" value="{{ r.courseTitle }}" style="margin-top:6px;">
+            </td>
+            <td>
+              <span class="cell-display">{{ r.semesterId }}</span>
+            </td>
+            <td>
+              <span class="cell-display"><span class="badge">{{ r.sectionId }}</span></span>
+              <input class="cell-input" type="text" name="section" value="{{ r.sectionId }}">
+            </td>
+            <td>
+              <span class="cell-display">{{ r.totalSections }}</span>
+            </td>
+            <td>
+              <span class="cell-display">{{ r.courseCategory }}</span>
+            </td>
+            <td>
+              <span class="cell-display">
+                {{ r.assignedFacultyUserId or 'NOT_ASSIGNED' }}
+                {% if r.facultyName %}
+                <small style="display:block; color:var(--muted);">{{ r.facultyName }}</small>
+                {% endif %}
+              </span>
+              <div class="cell-input" style="gap:6px; flex-direction:column;">
+                <select name="assignedFacultyUserId">
+                  <option value="" {% if not r.assignedFacultyUserId %}selected{% endif %}>Unassigned</option>
+                  {% for f in faculty_options or [] %}
+                  <option value="{{ f.userId }}" {% if r.assignedFacultyUserId == f.userId %}selected{% endif %}>
+                    {{ f.userName }}{% if f.userEmail %} ({{ f.userEmail }}){% endif %}
+                  </option>
+                  {% endfor %}
+                </select>
+                <input type="text" name="facultyName" value="{{ r.facultyName or '' }}" placeholder="Display name (optional)">
+              </div>
+            </td>
+            <td>
+              <span class="cell-display">{{ r.priorityRank if r.priorityRank is not none else '—' }}</span>
+            </td>
+            <td class="issues-cell">
+              {% if row_issues %}
+                {% for code in row_issues %}
+                  <span class="issue-icon issue-{{ code }}" data-tooltip="{{ issue_labels.get(code, 'Schedule issue') }}">!</span>
+                {% endfor %}
+              {% else %}
+                <span style="color:var(--muted); font-size:12px;">—</span>
+              {% endif %}
+            </td>
+            <td class="row-actions">
+              <button type="button" class="btn-primary small save-row">💾 Save</button>
+              <button type="button" class="btn-secondary small cancel-row">Cancel</button>
+            </td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr>
+            <td colspan="10" style="color:var(--muted); text-align: center; padding: 40px;">
+              <div>
+                <strong>No schedule generated yet</strong><br>
+                <small>Click "Generate Schedule" from the Admin Dashboard to create assignments.</small>
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Notes Section -->
+    <div class="form-section">
+      <details>
+        <summary style="cursor:pointer; font-weight: 600;">📝 Usage Notes</summary>
+        <ul style="margin-top:12px; color: var(--muted);">
+          <li>Use the <strong>Group by</strong> selector to switch between Course-first and Instructor-first views.</li>
+          <li><strong>Filter</strong> searches across all visible columns for quick navigation.</li>
+          <li>Use <strong>Download CSV</strong> to export the current (filtered) table for external analysis.</li>
+          <li><strong>Print</strong> button formats the page for printing or PDF export.</li>
+        </ul>
+      </details>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Inline JS: grouping, filtering, editing, CSV export, print -->
+<script>
+  (function () {
+    const table = document.getElementById('scheduleTable');
+    const tbody = table?.tBodies?.[0];
+    const groupSel = document.getElementById('groupSelect');
+    const filterInput = document.getElementById('filterInput');
+    const printBtn = document.getElementById('printBtn');
+    const csvBtn = document.getElementById('csvBtn');
+    const statusEl = document.getElementById('scheduleStatus');
+    const editEndpoint = "{{ url_for('admin_edit_schedule') }}";
+
+    if (!tbody) return;
+
+    const scheduleRows = Array.from(tbody.querySelectorAll('tr.schedule-row'));
+    if (!scheduleRows.length) {
+      if (printBtn) printBtn.addEventListener('click', () => window.print());
+      if (csvBtn) {
+        csvBtn.addEventListener('click', () => {
+          const headers = ['Offering ID', 'Course ID', 'Semester ID', 'Section ID', 'Total Sections', 'Course Category', 'Assigned Faculty ID', 'Priority Rank'];
+          const blob = new Blob([headers.join(',') + '\n'], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `schedule_{{ semester.semesterId }}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        });
+      }
+      return;
+    }
+
+    const baseRows = scheduleRows.map(tr => ({
+      tr,
+      offeringId: tr.dataset.offeringId || '',
+      courseId: tr.dataset.courseId || '',
+      courseTitle: tr.dataset.courseTitle || '',
+      semesterId: tr.dataset.semesterId || '',
+      section: tr.dataset.section || '',
+      totalSections: tr.dataset.totalSections || '',
+      category: tr.dataset.category || '',
+      faculty: tr.dataset.faculty || '',
+      facultyId: tr.dataset.facultyId || '',
+      groupKey: tr.dataset.groupKey || '',
+      issuesText: tr.dataset.issues || '',
+      priority: tr.dataset.priority || ''
+    }));
+
+    const activeGroupEdits = new Set();
+
+    function clearTbody() { while (tbody.firstChild) tbody.removeChild(tbody.firstChild); }
+
+    function makeGroupHeader(label, key) {
+      const tr = document.createElement('tr');
+      tr.className = 'group-row';
+      tr.dataset.groupKey = key;
+      if (activeGroupEdits.has(key)) tr.classList.add('is-editing');
+
+      const td = document.createElement('td');
+      td.colSpan = 10;
+      const wrap = document.createElement('div');
+      wrap.className = 'group-row-content';
+      const span = document.createElement('span');
+      span.textContent = label;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-primary group-edit-btn';
+      btn.dataset.groupKey = key;
+      btn.textContent = activeGroupEdits.has(key) ? 'Done Editing' : '✏️ Edit';
+      wrap.appendChild(span);
+      wrap.appendChild(btn);
+      td.appendChild(wrap);
+      tr.appendChild(td);
+      return tr;
+    }
+
+    function currentFilter() {
+      return (filterInput?.value || '').toLowerCase().trim();
+    }
+
+    function rowMatchesFilter(row, q) {
+      if (!q) return true;
+      const txt = (row.offeringId + ' ' + row.courseId + ' ' + row.courseTitle + ' ' + row.semesterId + ' ' + row.section + ' ' + row.totalSections + ' ' + row.category + ' ' + row.faculty + ' ' + row.priority + ' ' + row.issuesText).toLowerCase();
+      return txt.includes(q);
+    }
+
+    function applyRowEditing(tr, enabled) {
+      tr.classList.toggle('is-editing', enabled);
+      if (enabled) {
+        loadRowInputsFromDataset(tr);
+      }
+    }
+
+    function render() {
+      const mode = groupSel?.value || 'course';
+      const q = currentFilter();
+      clearTbody();
+
+      const filtered = baseRows.filter(r => rowMatchesFilter(r, q));
+
+      if (mode === 'instructor') {
+        activeGroupEdits.clear();
+        const groups = {};
+        for (const r of filtered) {
+          const key = r.faculty || '—';
+          (groups[key] ||= []).push(r);
+        }
+        const keys = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+        for (const k of keys) {
+          const header = makeGroupHeader(`Instructor: ${k}`, k);
+          header.querySelector('.group-edit-btn').style.display = 'none';
+          tbody.appendChild(header);
+          const rows = groups[k].sort((a, b) => (a.courseId + a.section).localeCompare(b.courseId + b.section));
+          for (const r of rows) {
+            applyRowEditing(r.tr, false);
+            tbody.appendChild(r.tr);
+          }
+        }
+      } else {
+        const groups = {};
+        for (const r of filtered) {
+          const key = r.groupKey || (r.courseId + ' — ' + r.courseTitle);
+          (groups[key] ||= []).push(r);
+        }
+        const keys = Object.keys(groups).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        for (const k of keys) {
+          const header = makeGroupHeader(`Course: ${k}`, k);
+          tbody.appendChild(header);
+          const rows = groups[k].sort((a, b) => (a.section + a.faculty).localeCompare(b.section + b.faculty, undefined, { numeric: true }));
+          for (const r of rows) {
+            applyRowEditing(r.tr, activeGroupEdits.has(k));
+            tbody.appendChild(r.tr);
+          }
+        }
+      }
+    }
+
+    function showStatus(msg, tone='green') {
+      if (!statusEl) return;
+      statusEl.textContent = msg;
+      statusEl.className = `badge ${tone}`;
+      statusEl.style.display = 'inline-flex';
+      clearTimeout(showStatus._timer);
+      showStatus._timer = setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+    }
+
+    function loadRowInputsFromDataset(tr) {
+      tr.querySelector('input[name="courseId"]').value = tr.dataset.courseId || '';
+      tr.querySelector('input[name="courseTitle"]').value = tr.dataset.courseTitle || '';
+      tr.querySelector('input[name="section"]').value = tr.dataset.section || '';
+      const facultySelect = tr.querySelector('select[name="assignedFacultyUserId"]');
+      if (facultySelect) facultySelect.value = tr.dataset.facultyId || '';
+      const facultyNameInput = tr.querySelector('input[name="facultyName"]');
+      if (facultyNameInput) facultyNameInput.value = tr.dataset.facultyName || '';
+    }
+
+    function collectPayload(tr) {
+      const courseIdInput = tr.querySelector('input[name="courseId"]');
+      const courseTitleInput = tr.querySelector('input[name="courseTitle"]');
+      const sectionInput = tr.querySelector('input[name="section"]');
+      const facultySelect = tr.querySelector('select[name="assignedFacultyUserId"]');
+      const facultyNameInput = tr.querySelector('input[name="facultyName"]');
+      return {
+        methodKey: tr.dataset.method || '',
+        offeringId: tr.dataset.offeringId,
+        originalSection: tr.dataset.originalSection || tr.dataset.section,
+        courseId: courseIdInput?.value?.trim() ?? '',
+        courseTitle: courseTitleInput?.value?.trim() ?? '',
+        section: sectionInput?.value?.trim() ?? '',
+        assignedFacultyUserId: facultySelect?.value || '',
+        facultyName: facultyNameInput?.value?.trim() ?? '',
+      };
+    }
+
+    async function saveRow(tr) {
+      const payload = collectPayload(tr);
+      if (!payload.courseId || !payload.courseTitle || !payload.section) {
+        showStatus('Course, title, and section are required.', 'red');
+        return;
+      }
+      try {
+        const resp = await fetch(editEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {
+          throw new Error(data?.error || 'Unable to save changes.');
+        }
+        const row = data.row || payload;
+        const facultyLabel = row.facultyName || (row.assignedFacultyUserId ? `Faculty #${row.assignedFacultyUserId}` : '');
+        tr.dataset.courseId = row.courseId || payload.courseId;
+        tr.dataset.courseTitle = row.courseTitle || payload.courseTitle;
+        tr.dataset.section = row.sectionId || payload.section;
+        tr.dataset.originalSection = row.sectionId || payload.section;
+        tr.dataset.totalSections = row.totalSections || tr.dataset.totalSections;
+        tr.dataset.category = row.courseCategory || tr.dataset.category;
+        tr.dataset.faculty = facultyLabel;
+        tr.dataset.facultyId = row.assignedFacultyUserId || '';
+        tr.dataset.facultyName = row.facultyName || '';
+        tr.dataset.priority = row.priorityRank || '';
+        const newGroupKey = `${tr.dataset.courseId} — ${tr.dataset.courseTitle}`;
+        tr.dataset.groupKey = newGroupKey;
+
+    const displayCells = {
+      courseContainer: tr.querySelector('td:nth-child(2) .cell-display'),
+      section: tr.querySelector('td:nth-child(4) .cell-display .badge'),
+      faculty: tr.querySelector('td:nth-child(7) .cell-display'),
+      priority: tr.querySelector('td:nth-child(8) .cell-display')
+    };
+    if (displayCells.courseContainer) {
+      const strongEl = displayCells.courseContainer.querySelector('strong');
+      if (strongEl) strongEl.textContent = tr.dataset.courseId;
+      const smallEl = displayCells.courseContainer.querySelector('small');
+      if (smallEl) smallEl.textContent = tr.dataset.courseTitle;
+    }
+    if (displayCells.section) displayCells.section.textContent = tr.dataset.section;
+    if (displayCells.faculty) {
+      displayCells.faculty.innerHTML = facultyLabel || '<span style="color:var(--muted);">Unassigned</span>';
+    }
+    if (displayCells.priority) {
+      displayCells.priority.textContent = (row.priorityRank !== null && row.priorityRank !== undefined)
+        ? row.priorityRank
+        : '—';
+    }
+
+        const base = baseRows.find(r => r.tr === tr);
+        if (base) {
+          base.courseId = tr.dataset.courseId;
+          base.courseTitle = tr.dataset.courseTitle;
+          base.section = tr.dataset.section;
+          base.totalSections = tr.dataset.totalSections;
+          base.category = tr.dataset.category;
+          base.faculty = tr.dataset.faculty;
+          base.facultyId = tr.dataset.facultyId;
+          base.groupKey = newGroupKey;
+          base.issuesText = tr.dataset.issues || '';
+          base.priority = tr.dataset.priority;
+        }
+
+        render();
+        showStatus('Schedule row saved. Re-run the generator anytime to refresh AI output.', 'green');
+      } catch (err) {
+        console.error(err);
+        showStatus(err.message || 'Unable to save changes.', 'red');
+      }
+    }
+
+    function setGroupEditing(key, enable) {
+      if (enable) {
+        activeGroupEdits.add(key);
+      } else {
+        activeGroupEdits.delete(key);
+      }
+      render();
+    }
+
+    table.addEventListener('click', (evt) => {
+      const btn = evt.target.closest('button');
+      if (!btn) return;
+      if (btn.classList.contains('group-edit-btn')) {
+        const key = btn.dataset.groupKey;
+        const enable = !activeGroupEdits.has(key);
+        setGroupEditing(key, enable);
+        return;
+      }
+      const tr = btn.closest('tr.schedule-row');
+      if (!tr) return;
+      if (btn.classList.contains('save-row')) {
+        saveRow(tr);
+      } else if (btn.classList.contains('cancel-row')) {
+        loadRowInputsFromDataset(tr);
+      }
+    });
+
+    if (groupSel) {
+      groupSel.addEventListener('change', () => {
+        if (groupSel.value !== 'course') {
+          activeGroupEdits.clear();
+        }
+        render();
+      });
+    }
+    if (filterInput) filterInput.addEventListener('input', render);
+    if (printBtn) printBtn.addEventListener('click', () => window.print());
+
+    function downloadCSV() {
+      const visibleRows = Array.from(tbody.querySelectorAll('tr.schedule-row'));
+      const headers = ['Offering ID', 'Course ID', 'Semester ID', 'Section ID', 'Total Sections', 'Course Category', 'Assigned Faculty ID', 'Priority Rank'];
+      const lines = [headers.join(',')];
+      visibleRows.forEach(tr => {
+        const cells = Array.from(tr.cells).slice(0, 8).map(td => {
+          const raw = td.innerText.replace(/\r?\n|\r/g, ' ').trim();
+          if (raw.includes(',') || raw.includes('"')) {
+            return '"' + raw.replace(/"/g, '""') + '"';
+          }
+          return raw;
+        });
+        lines.push(cells.join(','));
+      });
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `schedule_{{ semester.semesterId }}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    if (csvBtn) csvBtn.addEventListener('click', downloadCSV);
+
+    render();
+  })();
+</script>
+{% endblock %}

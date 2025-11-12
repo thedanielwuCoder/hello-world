@@ -1,0 +1,8 @@
+pandas>=2.1
+numpy>=1.26
+SQLAlchemy>=2.0
+PyMySQL>=1.1
+transformers>=4.45
+huggingface_hub>=0.25
+torch>=2.3; platform_system != 'Windows' or platform_machine != 'x86_64'
+google-genai>=0.2.0

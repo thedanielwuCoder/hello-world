@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">
+      <img src="https://cic.ndu.edu/Portals/74/CICSealWeb.png" alt="logo" />
+    </div>
+    <div>
+      <h1>CIC Course</h1>
+      <p>Admin Panel</p>
+    </div>
+  </div>
+
+  <h2 class="nav-section-title">Admin Tools</h2>
+  <a class="nav-button active">👥 Submitted Preferences</a>
+  <a class="nav-button" href="{{ url_for('admin_upload') }}">📤 Upload Files</a>
+  <a class="nav-button" href="{{ url_for('admin_schedule') }}">📋 View Schedule</a>
+  <a class="nav-button" href="{{ url_for('admin_analysis') }}">🧠 AI Analysis</a>
+  <a class="nav-button" href="{{ url_for('logout') }}">Logout</a>
+
+  <div class="sidebar-footer">
+    <div class="user-info">Logged in as</div>
+    <div class="username">{{ user.userEmail }}</div>
+  </div>
+</div>
+
+<div class="main-content">
+  {% if message %}
+  <div class="badge amber" style="margin-bottom: 16px;">{{ message }}</div>
+  {% endif %}
+  <div class="header admin-header">
+    <div class="header-main">
+      <div class="header-text">
+        <h2>Admin Dashboard — {{ active_semester.semesterId }}</h2>
+        <p>Review instructor submissions and generate the teaching schedule for the current semester.</p>
+      </div>
+      <div class="header-semester">
+        <span class="badge subtle">Semester {{ active_semester.semesterId }}</span>
+      </div>
+    </div>
+
+    <div class="header-meta">
+      <span class="badge">Total Instructors: {{ instructor_count }}</span>
+      <span class="badge">Total Preferences: {{ preference_count }}</span>
+      {% if missing_count > 0 %}
+      <span class="badge red">{{ missing_count }} missing submissions</span>
+      {% else %}
+      <span class="badge green">✓ All submissions received</span>
+      {% endif %}
+    </div>
+
+    <div class="header-actions">
+      {% if missing_count > 0 %}
+      <form method="post" action="{{ url_for('admin_notify') }}" onsubmit="return confirmNotify()">
+        <button class="btn-primary" type="submit">✉️ Notify</button>
+      </form>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('admin_generate') }}">
+        <button class="btn-primary" type="submit">⚙️ Generate Schedule</button>
+      </form>
+
+      <form method="post" action="{{ url_for('admin_reset_preferences') }}"
+        onsubmit="return confirm('Reset all submitted preferences for the active semester? This cannot be undone.')">
+        <button class="btn-primary" type="submit">🔄 Reset Preferences</button>
+      </form>
+
+      <a class="btn-primary" href="{{ url_for('admin_upload') }}">📤 Upload Files</a>
+      <a class="btn-primary" href="{{ url_for('admin_schedule') }}">📋 View Schedule</a>
+    </div>
+  </div>
+
+  <div class="content-area">
+    <!-- Table controls -->
+    <div class="form-section" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+      <h3 style="margin:0;">Preferences Table</h3>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <input id="filterInput" type="text" placeholder="Filter by instructor or course…"
+          style="padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; width:260px;">
+        <select id="itemsPerPage" style="padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px;">
+          <option value="5" selected>5 per page</option>
+          <option value="10">10 per page</option>
+          <option value="25">25 per page</option>
+          <option value="100">All</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="prefsTable">
+        <thead>
+          <tr>
+            <th>Instructor Name</th>
+            <th>Course ID</th>
+            <th>Course Name</th>
+            <th>Preference</th>
+            <th>Submitted?</th>
+            <th style="width:110px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in table_rows %}
+          {% set is_editing = (edit_key and row.rowKey == edit_key) %}
+          {% set edit_form_id = 'pref-edit-' ~ loop.index0 %}
+          <tr data-row-index="{{ loop.index0 }}">
+            <td>{{ row.instructorName }}</td>
+            <td>
+            {% if is_editing and row.courseId %}
+              <input type="text" name="course_id" value="{{ row.courseId }}" form="{{ edit_form_id }}" style="min-width:120px;">
+              {% else %}
+              {{ row.courseId or '' }}
+              {% endif %}
+            </td>
+            <td>
+            {% if is_editing and row.courseId %}
+              <input type="text" name="course_name" value="{{ row.courseTitle or '' }}" form="{{ edit_form_id }}" style="min-width:180px;">
+              {% else %}
+              {{ row.courseTitle or '' }}
+              {% endif %}
+            </td>
+            <td>
+              {% if is_editing and row.courseId %}
+              <input type="number" name="preference" value="{{ row.preference or 1 }}" min="1" max="5" form="{{ edit_form_id }}" style="width:80px;">
+              {% else %}
+              {{ row.preference or '' }}
+              {% endif %}
+            </td>
+            <td>
+              {% if row.hasSubmitted == 'Yes' %}
+              <span class="badge green">Yes</span>
+              {% else %}
+              <span class="badge red">No</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.courseId %}
+                {% if is_editing %}
+                <form id="{{ edit_form_id }}" method="post" action="{{ url_for('admin_edit_preferences') }}" style="margin:0; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                  <input type="hidden" name="original_user_id" value="{{ row.facultyUserId or row.instructorId }}">
+                  <input type="hidden" name="original_course_id" value="{{ row.courseId }}">
+                  <input type="hidden" name="faculty_user_id" value="{{ row.facultyUserId or row.instructorId }}">
+                  <button class="btn-primary" type="submit" name="action" value="update" style="min-width:70px;">Save</button>
+                  <a class="btn-secondary" href="{{ url_for('admin_dashboard') }}" style="min-width:70px; text-align:center;">Cancel</a>
+                  <button class="btn-secondary" type="submit" name="action" value="delete" style="min-width:70px;"
+                    onclick="return confirm('Remove {{ row.courseId }} for {{ row.instructorName }}?');">Remove</button>
+                </form>
+                {% else %}
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                  <form method="get" action="{{ url_for('admin_dashboard') }}" style="margin:0;">
+                    <input type="hidden" name="edit_key" value="{{ row.rowKey }}">
+                    <button class="btn-primary" type="submit" style="min-width:70px;">Edit</button>
+                  </form>
+                  <form method="post" action="{{ url_for('admin_edit_preferences') }}" style="margin:0;">
+                    <input type="hidden" name="faculty_user_id" value="{{ row.facultyUserId or row.instructorId }}">
+                    <input type="hidden" name="course_id" value="{{ row.courseId }}">
+                    <button class="btn-secondary" type="submit" name="action" value="delete" style="min-width:70px;"
+                      onclick="return confirm('Remove {{ row.courseId }} for {{ row.instructorName }}?');">Remove</button>
+                  </form>
+                </div>
+                {% endif %}
+              {% else %}
+              <span style="color:#cbd5f5;">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% if table_rows|length == 0 %}
+          <tr>
+            <td colspan="6" style="color:#64748b;">No instructors found.</td>
+          </tr>
+          {% endif %}
+        </tbody>
+        <tfoot>
+          <tr data-add-row="true">
+            {% set add_form_id = 'pref-add-form' %}
+            <td>
+              <input type="text" name="new_faculty_user_id" form="{{ add_form_id }}" placeholder="Instructor ID" style="min-width:120px;">
+            </td>
+            <td><input type="text" name="new_course_id" form="{{ add_form_id }}" placeholder="Course ID" style="min-width:110px;"></td>
+            <td><input type="text" name="new_course_name" form="{{ add_form_id }}" placeholder="Course name" style="min-width:140px;"></td>
+            <td><input type="number" name="new_preference" form="{{ add_form_id }}" placeholder="1" min="1" max="5" style="width:70px;"></td>
+            <td><span class="badge" style="background:#eef2ff; color:#475569;">New</span></td>
+            <td>
+              <form id="{{ add_form_id }}" method="post" action="{{ url_for('admin_edit_preferences') }}" style="margin:0;">
+                <input type="hidden" name="action" value="add">
+                <button class="btn-primary small" type="submit">Add Preference</button>
+              </form>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Pagination controls -->
+    <div class="pagination-controls" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding:12px 0;">
+      <div class="pagination-info" style="color:#64748b; font-size:0.9rem;">
+        Showing <span id="showingStart">1</span>-<span id="showingEnd">10</span> of <span id="totalRows">{{ preference_count }}</span> entries
+      </div>
+      <div class="pagination-buttons" style="display:flex; gap:8px;">
+        <button id="prevBtn" class="btn-secondary pagination-btn" disabled>← Previous</button>
+        <div id="pageNumbers" style="display:flex; gap:4px;"></div>
+        <button id="nextBtn" class="btn-secondary pagination-btn">Next →</button>
+      </div>
+    </div>
+
+    <!-- Tips section -->
+    <div class="form-section" style="margin-top:16px;">
+      <details>
+        <summary style="cursor:pointer;">Tips</summary>
+        <ul style="margin-top:8px;">
+          <li>Visit <strong>Upload Files</strong> to run <strong>Generate Schedule</strong> after most instructors have submitted.</li>
+          <li>Click <strong>View Schedule</strong> to review assignments per section.</li>
+          <li>The algorithm respects per-semester caps and core-course yearly caps.</li>
+        </ul>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- Pagination and Filter Script -->
+<script>
+  (function () {
+    const table = document.getElementById('prefsTable');
+    const filterInput = document.getElementById('filterInput');
+    const itemsPerPageSelect = document.getElementById('itemsPerPage');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const pageNumbers = document.getElementById('pageNumbers');
+    const showingStart = document.getElementById('showingStart');
+    const showingEnd = document.getElementById('showingEnd');
+    const totalRows = document.getElementById('totalRows');
+
+    if (!table) return;
+
+    let currentPage = 1;
+    let itemsPerPage = 5;
+    let filteredRows = Array.from(table.tBodies[0].rows);
+    let allRows = Array.from(table.tBodies[0].rows);
+
+    function updatePagination() {
+      const totalItems = filteredRows.length;
+      const totalPages = itemsPerPage === 100 ? 1 : Math.ceil(totalItems / itemsPerPage);
+      
+      // Hide all rows first
+      allRows.forEach(row => row.style.display = 'none');
+      
+      // Show current page rows
+      if (itemsPerPage === 100) {
+        filteredRows.forEach(row => row.style.display = '');
+      } else {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+        
+        for (let i = startIndex; i < endIndex; i++) {
+          if (filteredRows[i]) {
+            filteredRows[i].style.display = '';
+          }
+        }
+      }
+      
+      // Update pagination info
+      const start = totalItems === 0 ? 0 : (itemsPerPage === 100 ? 1 : (currentPage - 1) * itemsPerPage + 1);
+      const end = itemsPerPage === 100 ? totalItems : Math.min(currentPage * itemsPerPage, totalItems);
+      
+      showingStart.textContent = start;
+      showingEnd.textContent = end;
+      totalRows.textContent = totalItems;
+      
+      // Update navigation buttons
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages || totalPages <= 1;
+      
+      // Update page numbers
+      pageNumbers.innerHTML = '';
+      if (totalPages > 1 && itemsPerPage !== 100) {
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        
+        if (endPage - startPage + 1 < maxVisiblePages) {
+          startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+          const pageBtn = document.createElement('button');
+          pageBtn.textContent = i;
+          pageBtn.className = i === currentPage ? 'btn-primary pagination-btn active' : 'btn-secondary pagination-btn';
+          pageBtn.style.minWidth = '32px';
+          pageBtn.style.padding = '6px 8px';
+          pageBtn.addEventListener('click', () => {
+            currentPage = i;
+            updatePagination();
+          });
+          pageNumbers.appendChild(pageBtn);
+        }
+      }
+    }
+
+    function filterRows() {
+      const query = filterInput.value.toLowerCase().trim();
+      filteredRows = allRows.filter(row => {
+        const text = row.innerText.toLowerCase();
+        return text.includes(query);
+      });
+      currentPage = 1; // Reset to first page when filtering
+      updatePagination();
+    }
+
+    // Event listeners
+    if (filterInput) {
+      filterInput.addEventListener('input', filterRows);
+    }
+
+    if (itemsPerPageSelect) {
+      itemsPerPageSelect.addEventListener('change', function() {
+        itemsPerPage = parseInt(this.value);
+        currentPage = 1;
+        updatePagination();
+      });
+    }
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage--;
+          updatePagination();
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        const totalPages = itemsPerPage === 100 ? 1 : Math.ceil(filteredRows.length / itemsPerPage);
+        if (currentPage < totalPages) {
+          currentPage++;
+          updatePagination();
+        }
+      });
+    }
+
+    // Initialize pagination
+    updatePagination();
+  })();
+
+  // Notify confirmation function
+  function confirmNotify() {
+    const missingCount = {missing_count}};
+    const message = `Are you sure you want to send notification emails to ${missingCount} instructor${missingCount > 1 ? 's' : ''} who have not submitted their preferences yet?\n\nThis will remind them to complete their course preference submissions.`;
+    
+    return confirm(message);
+  
+</script>
+{% endblock %}

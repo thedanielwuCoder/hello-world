@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">
+      <img src="https://cic.ndu.edu/Portals/74/CICSealWeb.png" alt="logo" />
+    </div>
+    <div>
+      <h1>CIC Course</h1>
+      <p>Scheduler</p>
+    </div>
+  </div>
+
+  <h2 class="nav-section-title">My Tools</h2>
+  <a class="nav-button active">❤️ <span>My Preferences</span></a>
+  <a class="nav-button" href="{{ url_for('logout') }}">Logout</a>
+
+  <div class="sidebar-footer">
+    <div class="username">👤 {{ user.userName }}</div>
+  </div>
+</div>
+
+<div class="main-content">
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h2>Instructor Preferences</h2>
+      <div style="margin-top: 12px;">
+        {% if submitted %}
+        <span class="badge green">Submitted</span>
+        {% else %}
+        <span class="badge amber">Not Submitted</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Form section -->
+  <div class="content-area">
+    <div class="form-section">
+      <div class="form-group-row">
+        <div>
+          <label for="courseSelect" style="margin-bottom: 8px; display: block;">Course</label>
+          <select id="courseSelect" class="inline-select" required>
+            <option value="" disabled selected>— Choose a course —</option>
+            {% for c in courses %}
+            {% if c.courseId is not none and c.courseId|string|length > 0 %}
+            <option value="{{ c.courseId }}">{{ c.courseId }} — {{ c.courseTitle }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="prefSelect" style="margin-bottom: 8px; display: block;">Preference (1 = highest)</label>
+          <select id="prefSelect" class="inline-select" required>
+            <option value="1" selected>1 (Top)</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5 (Lowest)</option>
+          </select>
+        </div>
+        <div style="align-self:flex-end;">
+          <button class="btn-primary" type="button" onclick="addPrefRow()">➕ Add</button>
+        </div>
+      </div>
+
+      <div style="margin-top: 20px;">
+        <label for="notes" style="margin-bottom: 8px; display: block;">Notes (optional)</label>
+        <textarea id="notes" placeholder="Anything the admin should know…" rows="3"></textarea>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="form-section">
+      <h3 class="section-title" style="margin:0;">My Preference List</h3>
+      <div class="table-wrap" style="margin-top:8px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Preference Level</th>
+              <th>Course Title</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="prefsBody">
+            <!-- Filled by app.js -->
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Submit button below table -->
+      <div style="margin-top: 16px; text-align: center;">
+        <button id="submitBtn" class="btn-primary" type="button" onclick="openPreview()" disabled>
+          Submit Preferences
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preview Modal -->
+<div id="previewModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,.45); z-index:10000; padding:60px 20px 20px;">
+  <div class="login-box" style="max-width:620px; width:92%; position:relative; margin:0 auto;">
+    <h3 style="margin-top:0;">Confirm Your Submission</h3>
+    <p>Here's what you're about to submit:</p>
+    <ul id="previewList" style="margin:8px 0 16px 18px;"></ul>
+
+    <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+      <button class="logout-btn" type="button" onclick="closePreview()">Cancel</button>
+      <button class="btn-primary" type="button" onclick="confirmSubmit()">Submit</button>
+    </div>
+    <button class="modal-close" type="button" onclick="closePreview()" title="Close">×</button>
+  </div>
+</div>
+{% endblock %}

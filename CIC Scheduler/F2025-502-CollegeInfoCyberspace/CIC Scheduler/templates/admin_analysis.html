@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block body %}
+
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">
+      <img src="https://cic.ndu.edu/Portals/74/CICSealWeb.png" alt="logo" />
+    </div>
+    <div>
+      <h1>CIC Course</h1>
+      <p>AI Insights</p>
+    </div>
+  </div>
+
+  <h2 class="nav-section-title">Admin Tools</h2>
+  <a class="nav-button" href="{{ url_for('admin_dashboard') }}">👥 Submitted Preferences</a>
+  <a class="nav-button" href="{{ url_for('admin_upload') }}">📤 Upload Files</a>
+  <a class="nav-button" href="{{ url_for('admin_schedule') }}">📋 View Schedule</a>
+  <a class="nav-button active">🧠 AI Analysis</a>
+  <a class="nav-button" href="{{ url_for('logout') }}">Logout</a>
+
+  <div class="sidebar-footer">
+    <div class="user-info">Current Semester</div>
+    <div class="username">{{ semester.semesterId if semester else '—' }}</div>
+  </div>
+</div>
+
+<div class="main-content">
+  <div class="header">
+    <div class="header-left">
+      <h2>AI Schedule Analysis</h2>
+      <p>Review coverage, workload balance, and potential risks for the selected AI-generated schedule.</p>
+    </div>
+    <div class="actions-row" style="gap:12px; align-items:center;">
+      <strong style="color:#1f2937;">{{ method_label or 'Method' }}</strong>
+      <a class="btn-secondary" href="{{ url_for('admin_schedule', method=run_id) }}">⬅️ Back to Schedules</a>
+    </div>
+  </div>
+
+  <div class="content-area">
+    {% if not analysis %}
+    <div class="form-section" style="text-align:center; color:#64748b; padding: 32px;">
+      <p>No generated schedules found for analysis. Run the scheduler first from the Upload Files page.</p>
+    </div>
+    {% else %}
+    <div class="form-section" style="display:flex; gap:16px; flex-wrap:wrap;">
+      <div class="stat-card">
+        <div class="stat-label">Total Sections</div>
+        <div class="stat-value">{{ analysis.summary.total_sections }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Assigned Sections</div>
+        <div class="stat-value">{{ analysis.summary.assigned_sections }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Coverage</div>
+        <div class="stat-value">{{ analysis.summary.coverage_pct }}%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Faculty Utilized</div>
+        <div class="stat-value">{{ analysis.summary.instructor_count }}</div>
+      </div>
+    </div>
+
+    <div class="form-section" style="display:flex; gap:24px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:240px;">
+        <h3>Pros</h3>
+        {% if analysis.pros %}
+        <ul style="margin-top:12px; color:#15803d;">
+          {% for item in analysis.pros %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p style="color:#9ca3af;">No standout advantages detected.</p>
+        {% endif %}
+      </div>
+      <div style="flex:1; min-width:240px;">
+        <h3>Cons / Risks</h3>
+        {% if analysis.cons %}
+        <ul style="margin-top:12px; color:#b91c1c;">
+          {% for item in analysis.cons %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p style="color:#9ca3af;">No major risks identified.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if analysis.notes %}
+    <div class="form-section">
+      <h3>AI Notes</h3>
+      <ul style="margin-top:12px; color:#475569;">
+        {% for note in analysis.notes %}
+        <li>{{ note }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if analysis.unassigned %}
+    <div class="form-section">
+      <h3>Sections needing attention</h3>
+      <table class="simple-table">
+        <thead>
+          <tr>
+            <th>Course</th>
+            <th>Section</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in analysis.unassigned %}
+          <tr>
+            <td>{{ row.courseId }}</td>
+            <td>{{ row.section }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <div class="form-section">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0;">Method Comparison KPIs</h3>
+          <p style="color:var(--muted); margin:4px 0 0;">Raw data feeding Gemini AI reports.</p>
+        </div>
+        <form method="post" action="{{ url_for('admin_analysis', method=run_id) }}">
+          <input type="hidden" name="action" value="generate_report">
+          <button class="btn-primary" type="submit" {% if not kpi_table_rows %}disabled{% endif %}>🤖 Generate AI Report</button>
+        </form>
+      </div>
+
+      {% if kpi_table_rows %}
+      <div class="table-wrap" style="margin-top:12px;">
+        <table class="simple-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              {% for header in kpi_table_headers %}
+              <th>{{ header }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in kpi_table_rows %}
+            <tr>
+              <td>{{ row.metric }}</td>
+              {% for value in row['values'] %}
+              <td>{{ value }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if kpi_markdown %}
+      <pre style="background:#0f172a; color:#f8fafc; padding:12px; border-radius:12px; overflow:auto; margin-top:16px;">{{ kpi_markdown }}</pre>
+      {% endif %}
+
+      {% if ai_error %}
+      <div class="badge red" style="margin-top:12px;">{{ ai_error }}</div>
+      {% endif %}
+      {% if ai_report %}
+      <div class="form-section" style="margin-top:16px; background:#f8fafc; border:1px solid #dbeafe;">
+        <h3 style="margin-top:0;">Gemini AI Report</h3>
+        <pre style="white-space:pre-wrap; font-family:inherit; color:#1f2937;">{{ ai_report }}</pre>
+      </div>
+      {% endif %}
+      {% else %}
+      <p style="color:var(--muted); margin-top:12px;">Generate the schedule to view method KPIs.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

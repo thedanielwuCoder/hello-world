@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block body %}
+
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">
+      <img src="https://cic.ndu.edu/Portals/74/CICSealWeb.png" alt="logo" />
+    </div>
+    <div>
+      <h1>CIC Course</h1>
+      <p>Admin Tools</p>
+    </div>
+  </div>
+
+  <h2 class="nav-section-title">Admin Tools</h2>
+  <a class="nav-button" href="{{ url_for('admin_dashboard') }}">👥 Submitted Preferences</a>
+  <a class="nav-button active">📤 Upload Files</a>
+  <a class="nav-button" href="{{ url_for('admin_schedule') }}">📋 View Schedule</a>
+  <a class="nav-button" href="{{ url_for('admin_analysis') }}">🧠 AI Analysis</a>
+  <a class="nav-button" href="{{ url_for('logout') }}">Logout</a>
+
+  <div class="sidebar-footer">
+    <div class="user-info">Current Semester</div>
+    <div class="username">{{ (active_semester and active_semester.semesterId) or '—' }}</div>
+  </div>
+</div>
+
+<div class="main-content">
+  <div class="header">
+    <div class="header-left">
+      <h2>Upload Instructor Preferences</h2>
+      <p>Import instructor submissions from a CSV or Excel file, then trigger the AI scheduler.</p>
+    </div>
+    <div class="actions-row">
+      <form method="post" action="{{ url_for('admin_generate') }}">
+        <button class="btn-primary" type="submit">⚙️ Generate Schedule</button>
+      </form>
+      <a class="btn-secondary" href="{{ url_for('admin_schedule') }}" style="margin-left:12px;">📋 View Schedule</a>
+      <a class="btn-secondary" href="{{ url_for('admin_schedule', download='csv') }}" style="margin-left:12px;">⬇️ Download Schedule</a>
+    </div>
+  </div>
+
+  <div class="content-area">
+    {% if upload_error %}
+    <div class="badge red" style="margin-bottom: 16px;">{{ upload_error }}</div>
+    {% elif upload_result %}
+    <div class="badge green" style="margin-bottom: 16px;">
+      Uploaded {{ upload_result.total_rows }} rows — saved {{ upload_result.imported_rows }} preference{{ 's' if upload_result.imported_rows != 1 else '' }}.
+    </div>
+    {% endif %}
+
+    <div class="form-section">
+      <h3>1. Upload preference data</h3>
+      <p style="color:#64748b;">Accepted formats: <strong>.csv</strong>, <strong>.xlsx</strong>. The file should include columns for <em>UserEmail</em>, <em>CourseId</em>, and <em>priority_rank</em>.</p>
+      <form method="post" enctype="multipart/form-data" style="margin-top: 16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <input type="file" name="preferences_file" accept=".csv,.xlsx,.xls" required style="padding:8px; border:1px solid #d4d4d8; border-radius:8px;">
+        <button class="btn-primary" type="submit">📤 Upload File</button>
+      </form>
+    </div>
+
+    {% if upload_result %}
+    <div class="form-section" style="margin-top: 20px;">
+      <h3>Import summary</h3>
+      <ul style="margin-top: 12px; color:#475569;">
+        <li>Total rows processed: {{ upload_result.total_rows }}</li>
+        <li>Saved preferences: {{ upload_result.imported_rows }}</li>
+        <li>Skipped (invalid data): {{ upload_result.skipped_invalid }}</li>
+        <li>Skipped (missing user match): {{ upload_result.skipped_missing_user }}</li>
+        <li>Deduplicated rows (kept best priority): {{ upload_result.deduped }}</li>
+      </ul>
+      {% if upload_result.missing_emails %}
+      <div style="margin-top:12px; color:#b45309; background:#fef3c7; padding:12px; border-radius:8px;">
+        <strong>Missing accounts:</strong>
+        <span>The following emails were not found in the system: {{ upload_result.missing_emails | join(', ') }}.</span>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="form-section" style="margin-top: 20px;">
+      <h3>2. Generate the AI schedule</h3>
+      <p style="color:#64748b;">After uploading the latest preferences, click <strong>Generate Schedule</strong> to run the AI-based pairing algorithm.</p>
+      <form method="post" action="{{ url_for('admin_generate') }}" style="margin-top: 12px;">
+        <button class="btn-primary" type="submit">⚙️ Generate Schedule</button>
+      </form>
+      <p style="color:#94a3b8; font-size: 0.9rem; margin-top: 8px;">The generated schedules will be available in the <strong>View Schedule</strong> page and can be evaluated through the <strong>AI Analysis</strong> report.</p>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
